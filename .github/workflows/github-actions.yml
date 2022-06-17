@@ -1,0 +1,12 @@
+name: React app
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build the stack
+        run: |
+          docker-compose up -d --build

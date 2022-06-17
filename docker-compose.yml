@@ -1,0 +1,73 @@
+version: "3.4"
+
+services:
+  reverse-proxy:
+    image: traefik:v2.7
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      # Enable traefik for the specific service
+      - "traefik.enable=true"
+      # Global redirect to https
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=http"
+      - "traefik.http.routers.http-catchall.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+      # Allow the connections to the traefik api for the dashboard support
+      - "traefik.http.routers.traefik-https.service=api@internal"
+      - "traefik.http.services.traefik-svc.loadbalancer.server.port=9999"
+      - "traefik.http.routers.traefik-https.tls=true"
+      # Use the Let's encrypt resolver
+      - "traefik.http.routers.traefik-https.tls.certresolver=le"
+      # Use the traefik_net network that is declared below
+      - "traefik.docker.network=traefik_net"
+      # Use the auth for traefik dashboard
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_AUTH_USER_PASSWORD}"
+      - "traefik.http.routers.traefik-https.middlewares=traefik-auth"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-public-certificates:/certificates
+    command:
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
+      - --certificatesresolvers.le.acme.email=fake@google.com
+      - --certificatesresolvers.le.acme.storage=/certificates/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=http
+      - --accesslog
+      - --log
+      - --api
+    networks:
+      - traefik_net
+
+  app:
+    build: .
+    restart: always
+    volumes:
+      - app_data:/app
+      - node_modules:/app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend-https.service=frontend"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.frontend-https.rule=Host(`video-sharing.publicvm.com`)"
+      - "traefik.http.routers.frontend-https.entrypoints=https"
+      - "traefik.http.routers.frontend-https.tls=true"
+      - "traefik.docker.network=traefik_net"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - traefik_net
+
+volumes:
+  app_data:
+  node_modules:
+  traefik-public-certificates:
+
+networks:
+  traefik_net:
+    external: true
