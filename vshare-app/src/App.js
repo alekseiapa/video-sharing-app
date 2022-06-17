@@ -1,3 +1,4 @@
+import youtube from "./services/yt-api";
 import "./App.css";
 
 function App() {
